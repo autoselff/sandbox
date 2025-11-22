@@ -8,7 +8,7 @@
 #define CELLS_X WINDOW_X / CELL_SIZE
 #define CELLS_Y WINDOW_Y / CELL_SIZE
 
-#define PHYSICS_FPS 30
+#define PHYSICS_FPS 50
 #define PHYSICS_DELAY (1.0f / PHYSICS_FPS)
 
 void place_pixels(int cells[CELLS_X][CELLS_Y], int mouse_x, int mouse_y, int size, int type) {
@@ -130,7 +130,7 @@ int main(void) {
         }
         
         BeginDrawing();
-        ClearBackground((Color){ 56, 56, 76, 255 });
+        ClearBackground((Color){ 50, 50, 64, 255 });
         
         for (int x = 0; x < CELLS_X; x++) {
             for (int y = 0; y < CELLS_Y; y++) {
