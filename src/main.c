@@ -130,7 +130,7 @@ int main(void) {
         }
         
         BeginDrawing();
-        ClearBackground(RAYWHITE);
+        ClearBackground((Color){ 56, 56, 76, 255 });
         
         for (int x = 0; x < CELLS_X; x++) {
             for (int y = 0; y < CELLS_Y; y++) {
