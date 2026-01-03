@@ -11,7 +11,14 @@
 #define PHYSICS_FPS 50
 #define PHYSICS_DELAY (1.0f / PHYSICS_FPS)
 
-void place_pixels(int cells[CELLS_X][CELLS_Y], int mouse_x, int mouse_y, int size, int type) {
+typedef enum {
+    EMPTY,
+    SAND,
+    WATER,
+    STONE
+} CELL_TYPE;
+
+void place_pixels(CELL_TYPE cells[CELLS_X][CELLS_Y], int mouse_x, int mouse_y, int size, CELL_TYPE type) {
     for (int x = -size / 2; x < size / 2; x++) {
         for (int y = -size / 2; y < size / 2; y++) {
             int target_x = mouse_x + x;
@@ -29,8 +36,9 @@ int main(void) {
     InitWindow(WINDOW_X, WINDOW_Y, "sandbox");
     SetTargetFPS(TARGET_FPS);
 
-    int cells[CELLS_X][CELLS_Y] = { 0 };
+    CELL_TYPE cells[CELLS_X][CELLS_Y] = { 0 };
     float physicsTimer = 0.0f;
+    int actual_choice = SAND;
 
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
@@ -41,10 +49,20 @@ int main(void) {
         int mouse_cell_y = (int)(temp_mouse_position.y) / CELL_SIZE;
 
         if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            place_pixels(cells, mouse_cell_x, mouse_cell_y, 4, 1);
+            place_pixels(cells, mouse_cell_x, mouse_cell_y, 4, actual_choice);
         }
-        if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
-            place_pixels(cells, mouse_cell_x, mouse_cell_y, 4, 2);
+
+        if (IsKeyPressed(KEY_ONE)) {
+            actual_choice = SAND;
+        }
+        if (IsKeyPressed(KEY_TWO)) {
+            actual_choice = WATER;
+        }
+        if (IsKeyPressed(KEY_THREE)) {
+            actual_choice = STONE;
+        }
+        if (IsKeyPressed(KEY_ZERO)) {
+            actual_choice = EMPTY;
         }
 
         if (physicsTimer >= PHYSICS_DELAY) {
@@ -52,75 +70,75 @@ int main(void) {
 
             for (int y = CELLS_Y - 1; y >= 0; y--) {
                 for (int x = 0; x < CELLS_X; x++) {
-                    if (cells[x][y] == 1) {
+                    if (cells[x][y] == SAND) {
                         if (y + 1 < CELLS_Y) {
-                            if (cells[x][y + 1] == 0) {
-                                cells[x][y + 1] = 1;
-                                cells[x][y] = 0;
+                            if (cells[x][y + 1] == EMPTY) {
+                                cells[x][y + 1] = SAND;
+                                cells[x][y] = EMPTY;
                             }
-                            else if (cells[x][y + 1] == 2) {
-                                cells[x][y + 1] = 1;
-                                cells[x][y] = 2;
+                            else if (cells[x][y + 1] == WATER) {
+                                cells[x][y + 1] = SAND;
+                                cells[x][y] = WATER;
                             }
-                            else {
-                                int left = (x - 1 >= 0) && (cells[x - 1][y + 1] == 0);
-                                int right = (x + 1 < CELLS_X) && (cells[x + 1][y + 1] == 0);
+                            else if (cells[x][y + 1] != STONE) {
+                                int left = (x - 1 >= 0) && (cells[x - 1][y + 1] == EMPTY);
+                                int right = (x + 1 < CELLS_X) && (cells[x + 1][y + 1] == EMPTY);
 
                                 if (left && right) {
                                     int direction = GetRandomValue(0, 1) == 0 ? -1 : 1;
-                                    cells[x + direction][y + 1] = 1;
-                                    cells[x][y] = 0;
+                                    cells[x + direction][y + 1] = SAND;
+                                    cells[x][y] = EMPTY;
                                 }
                                 else if (left) {
-                                    cells[x - 1][y + 1] = 1;
-                                    cells[x][y] = 0;
+                                    cells[x - 1][y + 1] = SAND;
+                                    cells[x][y] = EMPTY;
                                 }
                                 else if (right) {
-                                    cells[x + 1][y + 1] = 1;
-                                    cells[x][y] = 0;
+                                    cells[x + 1][y + 1] = SAND;
+                                    cells[x][y] = EMPTY;
                                 }
                             }
                         }
                     }
 
-                    if (cells[x][y] == 2) {
-                        if (y + 1 < CELLS_Y && cells[x][y + 1] == 0) {
-                            cells[x][y + 1] = 2;
-                            cells[x][y] = 0;
+                    if (cells[x][y] == WATER) {
+                        if (y + 1 < CELLS_Y && cells[x][y + 1] == EMPTY) {
+                            cells[x][y + 1] = WATER;
+                            cells[x][y] = EMPTY;
                         }
                         else {
-                            int left = (x - 1 >= 0) && (y + 1 < CELLS_Y) && (cells[x - 1][y + 1] == 0);
-                            int right = (x + 1 < CELLS_X) && (y + 1 < CELLS_Y) && (cells[x + 1][y + 1] == 0);
+                            int left = (x - 1 >= 0) && (y + 1 < CELLS_Y) && (cells[x - 1][y + 1] == EMPTY);
+                            int right = (x + 1 < CELLS_X) && (y + 1 < CELLS_Y) && (cells[x + 1][y + 1] == EMPTY);
 
                             if (left && right) {
                                 int direction = GetRandomValue(0, 1) == 0 ? -1 : 1;
-                                cells[x + direction][y + 1] = 2;
-                                cells[x][y] = 0;
+                                cells[x + direction][y + 1] = WATER;
+                                cells[x][y] = EMPTY;
                             }
                             else if (left) {
-                                cells[x - 1][y + 1] = 2;
-                                cells[x][y] = 0;
+                                cells[x - 1][y + 1] = WATER;
+                                cells[x][y] = EMPTY;
                             }
                             else if (right) {
-                                cells[x + 1][y + 1] = 2;
-                                cells[x][y] = 0;
+                                cells[x + 1][y + 1] = WATER;
+                                cells[x][y] = EMPTY;
                             }
                             else {
-                                int left_h = (x - 1 >= 0) && (cells[x - 1][y] == 0);
-                                int right_h = (x + 1 < CELLS_X) && (cells[x + 1][y] == 0);
+                                int left_h = (x - 1 >= 0) && (cells[x - 1][y] == EMPTY);
+                                int right_h = (x + 1 < CELLS_X) && (cells[x + 1][y] == EMPTY);
 
                                 if (left_h && right_h) {
                                     int direction = GetRandomValue(0, 1) == 0 ? -1 : 1;
-                                    cells[x + direction][y] = 2;
-                                    cells[x][y] = 0;
+                                    cells[x + direction][y] = WATER;
+                                    cells[x][y] = EMPTY;
                                 }
                                 else if (left_h) {
-                                    cells[x - 1][y] = 2;
-                                    cells[x][y] = 0;
+                                    cells[x - 1][y] = WATER;
+                                    cells[x][y] = EMPTY;
                                 }
                                 else if (right_h) {
-                                    cells[x + 1][y] = 2;
-                                    cells[x][y] = 0;
+                                    cells[x + 1][y] = WATER;
+                                    cells[x][y] = EMPTY;
                                 }
                             }
                         }
@@ -131,16 +149,20 @@ int main(void) {
         
         BeginDrawing();
         ClearBackground((Color){ 50, 50, 64, 255 });
-        
+
         for (int x = 0; x < CELLS_X; x++) {
             for (int y = 0; y < CELLS_Y; y++) {
                 switch (cells[x][y]) {
-                    case 1:
+                    case SAND:
                         DrawRectangle(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, ORANGE);
                         break;
 
-                    case 2:
+                    case WATER:
                         DrawRectangle(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, BLUE);
+                        break;
+
+                    case STONE:
+                        DrawRectangle(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, GRAY);
                         break;
 
                     default:
