@@ -1,179 +1,195 @@
 #include "raylib.h"
+#include <stdbool.h>
 
-#define WINDOW_X 800
-#define WINDOW_Y 600
+#define WINDOW_WIDTH 800
+#define WINDOW_HEIGHT 600
 #define TARGET_FPS 60
 
 #define CELL_SIZE 4
-#define CELLS_X WINDOW_X / CELL_SIZE
-#define CELLS_Y WINDOW_Y / CELL_SIZE
+#define GRID_WIDTH (WINDOW_WIDTH / CELL_SIZE)
+#define GRID_HEIGHT (WINDOW_HEIGHT / CELL_SIZE)
 
 #define PHYSICS_FPS 50
-#define PHYSICS_DELAY (1.0f / PHYSICS_FPS)
+#define PHYSICS_TIMESTEP (1.0f / PHYSICS_FPS)
+
+#define BRUSH_SIZE 4
 
 typedef enum {
-    EMPTY,
-    SAND,
-    WATER,
-    STONE
-} CELL_TYPE;
+    CELL_EMPTY,
+    CELL_SAND,
+    CELL_WATER,
+    CELL_STONE
+} cell_type;
 
-void place_pixels(CELL_TYPE cells[CELLS_X][CELLS_Y], int mouse_x, int mouse_y, int size, CELL_TYPE type) {
-    for (int x = -size / 2; x < size / 2; x++) {
-        for (int y = -size / 2; y < size / 2; y++) {
-            int target_x = mouse_x + x;
-            int target_y = mouse_y + y;
-            
-            if (target_x >= 0 && target_x < CELLS_X && 
-                target_y >= 0 && target_y < CELLS_Y) {
-                cells[target_x][target_y] = type;
+typedef struct {
+    cell_type grid[GRID_WIDTH][GRID_HEIGHT];
+    float physics_accumulator;
+    cell_type selected_type;
+} simulation_state;
+
+static void init_simulation(simulation_state* state);
+static void handle_input(simulation_state* state);
+static void update_physics(simulation_state* state);
+static void render_simulation(const simulation_state* state);
+static void place_cells(cell_type grid[GRID_WIDTH][GRID_HEIGHT], int cell_x, int cell_y, int size, cell_type type);
+static Color get_cell_color(cell_type type);
+
+int main(void) {
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "sandbox");
+    SetTargetFPS(TARGET_FPS);
+    simulation_state state;
+    init_simulation(&state);
+
+    while (!WindowShouldClose()) {
+        handle_input(&state);
+        update_physics(&state);
+        render_simulation(&state);
+    }
+
+    CloseWindow();
+    return 0;
+}
+
+static void init_simulation(simulation_state* state) {
+    for (int x = 0; x < GRID_WIDTH; x++) {
+        for (int y = 0; y < GRID_HEIGHT; y++) {
+            state->grid[x][y] = CELL_EMPTY;
+        }
+    }
+    state->physics_accumulator = 0.0f;
+    state->selected_type = CELL_SAND;
+}
+
+static void handle_input(simulation_state* state) {
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        Vector2 mouse_pos = GetMousePosition();
+        int cell_x = (int)(mouse_pos.x / CELL_SIZE);
+        int cell_y = (int)(mouse_pos.y / CELL_SIZE);
+        place_cells(state->grid, cell_x, cell_y, BRUSH_SIZE, state->selected_type);
+    }
+
+    if (IsKeyPressed(KEY_ONE)) state->selected_type = CELL_SAND;
+    if (IsKeyPressed(KEY_TWO)) state->selected_type = CELL_WATER;
+    if (IsKeyPressed(KEY_THREE)) state->selected_type = CELL_STONE;
+    if (IsKeyPressed(KEY_ZERO)) state->selected_type = CELL_EMPTY;
+}
+
+static void update_physics(simulation_state* state) {
+    state->physics_accumulator += GetFrameTime();
+    if (state->physics_accumulator >= PHYSICS_TIMESTEP) {
+        state->physics_accumulator -= PHYSICS_TIMESTEP;
+        for (int y = GRID_HEIGHT - 1; y >= 0; y--) {
+            for (int x = 0; x < GRID_WIDTH; x++) {
+                if (state->grid[x][y] == CELL_SAND) {
+                    if (y + 1 < GRID_HEIGHT) {
+                        if (state->grid[x][y + 1] == CELL_EMPTY) {
+                            state->grid[x][y + 1] = CELL_SAND;
+                            state->grid[x][y] = CELL_EMPTY;
+                        }
+                        else if (state->grid[x][y + 1] == CELL_WATER) {
+                            state->grid[x][y + 1] = CELL_SAND;
+                            state->grid[x][y] = CELL_WATER;
+                        }
+                        else if (state->grid[x][y + 1] != CELL_STONE) {
+                            int left = (x - 1 >= 0) && (state->grid[x - 1][y + 1] == CELL_EMPTY);
+                            int right = (x + 1 < GRID_WIDTH) && (state->grid[x + 1][y + 1] == CELL_EMPTY);
+                            if (left && right) {
+                                int direction = GetRandomValue(0, 1) == 0 ? -1 : 1;
+                                state->grid[x + direction][y + 1] = CELL_SAND;
+                                state->grid[x][y] = CELL_EMPTY;
+                            }
+                            else if (left) {
+                                state->grid[x - 1][y + 1] = CELL_SAND;
+                                state->grid[x][y] = CELL_EMPTY;
+                            }
+                            else if (right) {
+                                state->grid[x + 1][y + 1] = CELL_SAND;
+                                state->grid[x][y] = CELL_EMPTY;
+                            }
+                        }
+                    }
+                }
+                if (state->grid[x][y] == CELL_WATER) {
+                    if (y + 1 < GRID_HEIGHT && state->grid[x][y + 1] == CELL_EMPTY) {
+                        state->grid[x][y + 1] = CELL_WATER;
+                        state->grid[x][y] = CELL_EMPTY;
+                    }
+                    else {
+                        int left = (x - 1 >= 0) && (y + 1 < GRID_HEIGHT) && (state->grid[x - 1][y + 1] == CELL_EMPTY);
+                        int right = (x + 1 < GRID_WIDTH) && (y + 1 < GRID_HEIGHT) && (state->grid[x + 1][y + 1] == CELL_EMPTY);
+                        if (left && right) {
+                            int direction = GetRandomValue(0, 1) == 0 ? -1 : 1;
+                            state->grid[x + direction][y + 1] = CELL_WATER;
+                            state->grid[x][y] = CELL_EMPTY;
+                        }
+                        else if (left) {
+                            state->grid[x - 1][y + 1] = CELL_WATER;
+                            state->grid[x][y] = CELL_EMPTY;
+                        }
+                        else if (right) {
+                            state->grid[x + 1][y + 1] = CELL_WATER;
+                            state->grid[x][y] = CELL_EMPTY;
+                        }
+                        else {
+                            int left_h = (x - 1 >= 0) && (state->grid[x - 1][y] == CELL_EMPTY);
+                            int right_h = (x + 1 < GRID_WIDTH) && (state->grid[x + 1][y] == CELL_EMPTY);
+                            if (left_h && right_h) {
+                                int direction = GetRandomValue(0, 1) == 0 ? -1 : 1;
+                                state->grid[x + direction][y] = CELL_WATER;
+                                state->grid[x][y] = CELL_EMPTY;
+                            }
+                            else if (left_h) {
+                                state->grid[x - 1][y] = CELL_WATER;
+                                state->grid[x][y] = CELL_EMPTY;
+                            }
+                            else if (right_h) {
+                                state->grid[x + 1][y] = CELL_WATER;
+                                state->grid[x][y] = CELL_EMPTY;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-int main(void) {
-    InitWindow(WINDOW_X, WINDOW_Y, "sandbox");
-    SetTargetFPS(TARGET_FPS);
-
-    CELL_TYPE cells[CELLS_X][CELLS_Y] = { 0 };
-    float physicsTimer = 0.0f;
-    int actual_choice = SAND;
-
-    while (!WindowShouldClose()) {
-        float deltaTime = GetFrameTime();
-        physicsTimer += deltaTime;
-
-        Vector2 temp_mouse_position = GetMousePosition();
-        int mouse_cell_x = (int)(temp_mouse_position.x) / CELL_SIZE;
-        int mouse_cell_y = (int)(temp_mouse_position.y) / CELL_SIZE;
-
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            place_pixels(cells, mouse_cell_x, mouse_cell_y, 4, actual_choice);
-        }
-
-        if (IsKeyPressed(KEY_ONE)) {
-            actual_choice = SAND;
-        }
-        if (IsKeyPressed(KEY_TWO)) {
-            actual_choice = WATER;
-        }
-        if (IsKeyPressed(KEY_THREE)) {
-            actual_choice = STONE;
-        }
-        if (IsKeyPressed(KEY_ZERO)) {
-            actual_choice = EMPTY;
-        }
-
-        if (physicsTimer >= PHYSICS_DELAY) {
-            physicsTimer -= PHYSICS_DELAY;
-
-            for (int y = CELLS_Y - 1; y >= 0; y--) {
-                for (int x = 0; x < CELLS_X; x++) {
-                    if (cells[x][y] == SAND) {
-                        if (y + 1 < CELLS_Y) {
-                            if (cells[x][y + 1] == EMPTY) {
-                                cells[x][y + 1] = SAND;
-                                cells[x][y] = EMPTY;
-                            }
-                            else if (cells[x][y + 1] == WATER) {
-                                cells[x][y + 1] = SAND;
-                                cells[x][y] = WATER;
-                            }
-                            else if (cells[x][y + 1] != STONE) {
-                                int left = (x - 1 >= 0) && (cells[x - 1][y + 1] == EMPTY);
-                                int right = (x + 1 < CELLS_X) && (cells[x + 1][y + 1] == EMPTY);
-
-                                if (left && right) {
-                                    int direction = GetRandomValue(0, 1) == 0 ? -1 : 1;
-                                    cells[x + direction][y + 1] = SAND;
-                                    cells[x][y] = EMPTY;
-                                }
-                                else if (left) {
-                                    cells[x - 1][y + 1] = SAND;
-                                    cells[x][y] = EMPTY;
-                                }
-                                else if (right) {
-                                    cells[x + 1][y + 1] = SAND;
-                                    cells[x][y] = EMPTY;
-                                }
-                            }
-                        }
-                    }
-
-                    if (cells[x][y] == WATER) {
-                        if (y + 1 < CELLS_Y && cells[x][y + 1] == EMPTY) {
-                            cells[x][y + 1] = WATER;
-                            cells[x][y] = EMPTY;
-                        }
-                        else {
-                            int left = (x - 1 >= 0) && (y + 1 < CELLS_Y) && (cells[x - 1][y + 1] == EMPTY);
-                            int right = (x + 1 < CELLS_X) && (y + 1 < CELLS_Y) && (cells[x + 1][y + 1] == EMPTY);
-
-                            if (left && right) {
-                                int direction = GetRandomValue(0, 1) == 0 ? -1 : 1;
-                                cells[x + direction][y + 1] = WATER;
-                                cells[x][y] = EMPTY;
-                            }
-                            else if (left) {
-                                cells[x - 1][y + 1] = WATER;
-                                cells[x][y] = EMPTY;
-                            }
-                            else if (right) {
-                                cells[x + 1][y + 1] = WATER;
-                                cells[x][y] = EMPTY;
-                            }
-                            else {
-                                int left_h = (x - 1 >= 0) && (cells[x - 1][y] == EMPTY);
-                                int right_h = (x + 1 < CELLS_X) && (cells[x + 1][y] == EMPTY);
-
-                                if (left_h && right_h) {
-                                    int direction = GetRandomValue(0, 1) == 0 ? -1 : 1;
-                                    cells[x + direction][y] = WATER;
-                                    cells[x][y] = EMPTY;
-                                }
-                                else if (left_h) {
-                                    cells[x - 1][y] = WATER;
-                                    cells[x][y] = EMPTY;
-                                }
-                                else if (right_h) {
-                                    cells[x + 1][y] = WATER;
-                                    cells[x][y] = EMPTY;
-                                }
-                            }
-                        }
-                    }
-                }
+static void render_simulation(const simulation_state* state) {
+    BeginDrawing();
+    ClearBackground((Color){ 50, 50, 64, 255 });
+    for (int x = 0; x < GRID_WIDTH; x++) {
+        for (int y = 0; y < GRID_HEIGHT; y++) {
+            cell_type type = state->grid[x][y];
+            if (type != CELL_EMPTY) {
+                DrawRectangle(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, get_cell_color(type));
             }
         }
-        
-        BeginDrawing();
-        ClearBackground((Color){ 50, 50, 64, 255 });
-
-        for (int x = 0; x < CELLS_X; x++) {
-            for (int y = 0; y < CELLS_Y; y++) {
-                switch (cells[x][y]) {
-                    case SAND:
-                        DrawRectangle(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, ORANGE);
-                        break;
-
-                    case WATER:
-                        DrawRectangle(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, BLUE);
-                        break;
-
-                    case STONE:
-                        DrawRectangle(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, GRAY);
-                        break;
-
-                    default:
-                        break;
-                }
-            }
-        }
-        
-        EndDrawing();
     }
-    
-    CloseWindow();
-    return 0;
+    EndDrawing();
+}
+
+static void place_cells(cell_type grid[GRID_WIDTH][GRID_HEIGHT], int cell_x, int cell_y, int size, cell_type type) {
+    int half_size = size / 2;
+    for (int dx = -half_size; dx < half_size; dx++) {
+        for (int dy = -half_size; dy < half_size; dy++) {
+            int x = cell_x + dx;
+            int y = cell_y + dy;
+            if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) {
+                grid[x][y] = type;
+            }
+        }
+    }
+}
+
+static Color get_cell_color(cell_type type) {
+    switch (type) {
+        case CELL_SAND:
+            return ORANGE;
+        case CELL_WATER:
+            return BLUE;
+        case CELL_STONE:
+            return GRAY;
+        default:
+            return BLANK;
+    }
 }
